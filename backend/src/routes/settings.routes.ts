@@ -1,9 +1,12 @@
 import { Router } from 'express';
-import { getSettings, updateSettings } from '../controllers/settings.controller';
+import { getStore, updateStore } from '../controllers/settings.controller';
+import { authMiddleware } from '../middlewares/authMiddleware';
 
 const router = Router();
 
-router.get('/', getSettings);
-router.put('/', updateSettings);
+router.use(authMiddleware);
+
+router.get('/', getStore);
+router.put('/', updateStore);
 
 export default router;
