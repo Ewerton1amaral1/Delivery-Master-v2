@@ -1,10 +1,14 @@
 import { Request, Response } from 'express';
 import prisma from '../lib/prisma';
 import { OrderStatus, PaymentMethod } from '@prisma/client';
+// import { whatsappService } from '../services/whatsapp.service'; // Default Bot (Disabled for now)
 
 export const getOrders = async (req: Request, res: Response) => {
     try {
+        // @ts-ignore
+        const storeId = req.user?.storeId;
         const orders = await prisma.order.findMany({
+            where: { storeId },
             include: {
                 items: true,
                 client: true,
@@ -20,6 +24,13 @@ export const getOrders = async (req: Request, res: Response) => {
 
 export const createOrder = async (req: Request, res: Response) => {
     try {
+        // @ts-ignore
+        const storeId = req.user?.storeId;
+        if (!storeId) {
+            res.status(403).json({ error: 'Store context missing' });
+            return;
+        }
+
         const {
             clientId,
             clientName,
@@ -34,12 +45,16 @@ export const createOrder = async (req: Request, res: Response) => {
             items // Array of OrderItem
         } = req.body;
 
-        // Calculate sequential ID
-        const lastOrder = await prisma.order.findFirst({ orderBy: { displayId: 'desc' } });
+        // Calculate sequential ID (Per Store)
+        const lastOrder = await prisma.order.findFirst({
+            where: { storeId },
+            orderBy: { displayId: 'desc' }
+        });
         const nextId = (lastOrder?.displayId || 0) + 1;
 
         const order = await prisma.order.create({
             data: {
+                storeId,
                 displayId: nextId,
                 clientId,
                 clientName,
@@ -76,7 +91,6 @@ export const createOrder = async (req: Request, res: Response) => {
     }
 };
 
-import { whatsappService } from '../services/whatsapp.service';
 
 export const updateOrderStatus = async (req: Request, res: Response) => {
     try {
@@ -93,9 +107,9 @@ export const updateOrderStatus = async (req: Request, res: Response) => {
 
         // NOTIFY DRIVER (Mock trigger on 'DELIVERING')
         // Assuming 'DELIVERING' is the status for "Out for Delivery"
-        if (status === 'DELIVERING' && order.driver && order.driver.phone) {
-            await whatsappService.sendDriverNotification(order.driver.phone, order);
-        }
+        // if (status === 'DELIVERING' && order.driver && order.driver.phone) {
+        //    await whatsappService.sendDriverNotification(order.driver.phone, order);
+        // }
 
         res.json(order);
     } catch (error) {

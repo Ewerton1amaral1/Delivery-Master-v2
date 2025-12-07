@@ -4,7 +4,10 @@ import prisma from '../lib/prisma';
 // LIST
 export const getDrivers = async (req: Request, res: Response) => {
     try {
+        // @ts-ignore
+        const storeId = req.user?.storeId;
         const drivers = await prisma.driver.findMany({
+            where: { storeId },
             orderBy: { name: 'asc' }
         });
         res.json(drivers);
@@ -16,9 +19,17 @@ export const getDrivers = async (req: Request, res: Response) => {
 // CREATE
 export const createDriver = async (req: Request, res: Response) => {
     try {
+        // @ts-ignore
+        const storeId = req.user?.storeId;
+        if (!storeId) {
+            res.status(403).json({ error: 'Missing store context' });
+            return;
+        }
+
         const { name, phone, plate, pixKey, dailyRate } = req.body;
         const driver = await prisma.driver.create({
             data: {
+                storeId,
                 name,
                 phone,
                 plate,

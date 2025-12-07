@@ -4,7 +4,10 @@ import prisma from '../lib/prisma';
 // LIST
 export const getEmployees = async (req: Request, res: Response) => {
     try {
+        // @ts-ignore
+        const storeId = req.user?.storeId;
         const employees = await prisma.employee.findMany({
+            where: { storeId },
             orderBy: { name: 'asc' },
             include: { advances: true }
         });
@@ -17,9 +20,17 @@ export const getEmployees = async (req: Request, res: Response) => {
 // CREATE
 export const createEmployee = async (req: Request, res: Response) => {
     try {
+        // @ts-ignore
+        const storeId = req.user?.storeId;
+        if (!storeId) {
+            res.status(403).json({ error: 'Missing store context' });
+            return;
+        }
+
         const { name, cpf, rg, phone, address, email, role, admissionDate, baseSalary, transportVoucherValue } = req.body;
         const employee = await prisma.employee.create({
             data: {
+                storeId,
                 name,
                 cpf,
                 rg,

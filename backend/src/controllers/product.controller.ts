@@ -4,10 +4,19 @@ import { ProductCategory } from '@prisma/client';
 
 export const getProducts = async (req: Request, res: Response) => {
     try {
+        const storeId = (req.query.storeId as string) || (req as any).user?.storeId;
+
+        if (!storeId) {
+            // If no store specified, return empty or error? For now empty to avoid leaking
+            res.json([]);
+            return;
+        }
+
         const products = await prisma.product.findMany({
+            where: { storeId },
             orderBy: { category: 'asc' }
         });
-        console.log(`[API] Listing Products: Found ${products.length} in DB.`);
+        console.log(`[API] Listing Products for Store ${storeId}: Found ${products.length}`);
         res.json(products);
     } catch (error) {
         res.status(500).json({ error: 'Failed to fetch products' });
@@ -16,6 +25,13 @@ export const getProducts = async (req: Request, res: Response) => {
 
 export const createProduct = async (req: Request, res: Response) => {
     try {
+        // @ts-ignore
+        const storeId = req.user?.storeId;
+        if (!storeId) {
+            res.status(403).json({ error: 'Store context missing' });
+            return;
+        }
+
         const { name, description, price, category, imageUrl, stock, ingredients } = req.body;
 
         // Sanitize inputs
@@ -26,17 +42,15 @@ export const createProduct = async (req: Request, res: Response) => {
             category: (Object.values(ProductCategory).includes(category) ? category : 'SNACK') as ProductCategory,
             imageUrl: imageUrl || 'https://placehold.co/200',
             stock: isNaN(Number(stock)) ? 0 : Number(stock),
-            ingredients: JSON.stringify(ingredients || [])
+            ingredients: JSON.stringify(ingredients || []),
+            storeId: storeId
         };
 
-        console.log('[API] Creating Product with data:', safeData);
+        console.log('[API] Creating Product:', safeData);
 
         const product = await prisma.product.create({
             data: safeData
         });
-
-        const count = await prisma.product.count();
-        console.log(`[API] Product Created: ${product.name}. Total in DB: ${count}`);
 
         res.status(201).json(product);
     } catch (error) {

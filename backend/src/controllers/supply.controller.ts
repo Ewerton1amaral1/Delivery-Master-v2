@@ -4,7 +4,10 @@ import prisma from '../lib/prisma';
 // LIST
 export const getSupplies = async (req: Request, res: Response) => {
     try {
+        // @ts-ignore
+        const storeId = req.user?.storeId;
         const supplies = await prisma.supplyItem.findMany({
+            where: { storeId },
             orderBy: { name: 'asc' }
         });
         res.json(supplies);
@@ -16,9 +19,17 @@ export const getSupplies = async (req: Request, res: Response) => {
 // CREATE
 export const createSupply = async (req: Request, res: Response) => {
     try {
+        // @ts-ignore
+        const storeId = req.user?.storeId;
+        if (!storeId) {
+            res.status(403).json({ error: 'Missing store context' });
+            return;
+        }
+
         const { name, unit, quantity, minQuantity, category } = req.body;
         const supply = await prisma.supplyItem.create({
             data: {
+                storeId,
                 name,
                 unit,
                 quantity: parseFloat(quantity || 0),

@@ -23,10 +23,14 @@ export const login = async (req: Request, res: Response) => {
             return;
         }
 
-        // Generate token
-        const token = jwt.sign({ userId: user.id, role: user.role }, SECRET_KEY, { expiresIn: '1d' });
+        // Generate token with storeId
+        const token = jwt.sign(
+            { userId: user.id, role: user.role, storeId: user.storeId },
+            SECRET_KEY,
+            { expiresIn: '1d' }
+        );
 
-        res.json({ token, user: { id: user.id, username: user.username, role: user.role } });
+        res.json({ token, user: { id: user.id, username: user.username, role: user.role, storeId: user.storeId } });
     } catch (error) {
         res.status(500).json({ error: 'Login failed' });
     }
@@ -34,7 +38,7 @@ export const login = async (req: Request, res: Response) => {
 
 export const register = async (req: Request, res: Response) => {
     try {
-        const { username, password, role, name } = req.body;
+        const { username, password, storeName, phone } = req.body;
 
         const existing = await prisma.user.findUnique({ where: { username } });
         if (existing) {
@@ -42,19 +46,33 @@ export const register = async (req: Request, res: Response) => {
             return;
         }
 
+        // 1. Create Store
+        const slug = storeName.toLowerCase().replace(/ /g, '-').replace(/[^\w-]+/g, '');
+        const store = await prisma.store.create({
+            data: {
+                name: storeName,
+                slug: `${slug}-${Math.floor(Math.random() * 1000)}`, // Ensure uniqueness
+                contactPhone: phone,
+                address: 'Endereço não configurado'
+            }
+        });
+
+        // 2. Create Admin User for Store
         const hashedPassword = await bcrypt.hash(password, 10);
 
         const user = await prisma.user.create({
             data: {
                 username,
                 password: hashedPassword,
-                role: role || 'STORE',
-                name
+                role: 'STORE',
+                name: username,
+                storeId: store.id
             }
         });
 
-        res.status(201).json({ message: 'User created' });
+        res.status(201).json({ message: 'Store created successfully', storeId: store.id });
     } catch (error) {
+        console.error(error);
         res.status(500).json({ error: 'Registration failed' });
     }
 };

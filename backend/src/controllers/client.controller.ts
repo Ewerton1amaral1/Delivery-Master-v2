@@ -3,7 +3,10 @@ import prisma from '../lib/prisma';
 
 export const getClients = async (req: Request, res: Response) => {
     try {
+        // @ts-ignore
+        const storeId = req.user?.storeId;
         const clients = await prisma.client.findMany({
+            where: { storeId },
             include: { addresses: true },
             orderBy: { name: 'asc' }
         });
@@ -16,11 +19,18 @@ export const getClients = async (req: Request, res: Response) => {
 
 export const createClient = async (req: Request, res: Response) => {
     try {
-        const { name, phone, email, address, preferences, distanceKm } = req.body; // Expanded fields
+        // @ts-ignore
+        const storeId = req.user?.storeId;
+        if (!storeId) {
+            res.status(403).json({ error: 'Missing store context' });
+            return;
+        }
+
+        const { name, phone, email, address, preferences, distanceKm } = req.body;
 
         // Prepare Address Data if present
         let addressCreate;
-        if (address && address.street) { // Minimal validation
+        if (address && address.street) {
             addressCreate = {
                 create: {
                     street: address.street,
@@ -37,13 +47,11 @@ export const createClient = async (req: Request, res: Response) => {
 
         const client = await prisma.client.create({
             data: {
+                storeId,
                 name,
                 phone,
                 email,
                 preferences,
-                // If distanceKm is passed (not in schema? check schema. Client has distanceKm? No, it was added in Frontend types but not schema visible above. Wait, let me check schema again. Line 53-65. No distanceKm in schema. It's safe to ignore or Add it. I'll ignore for now to avoid migration).
-                // Actually step 1060 schema lines 52-65: walletBalance, preferences, createdAt... NO distanceKm.
-                // So I will NOT save distanceKm.
                 addresses: addressCreate
             },
             include: { addresses: true }

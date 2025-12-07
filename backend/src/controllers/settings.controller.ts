@@ -1,55 +1,53 @@
 import { Request, Response } from 'express';
 import prisma from '../lib/prisma';
 
-export const getSettings = async (req: Request, res: Response) => {
+export const getStore = async (req: Request, res: Response) => {
     try {
-        let settings = await prisma.storeSettings.findFirst();
-        if (!settings) {
-            // Create default if not exists
-            settings = await prisma.storeSettings.create({
-                data: {
-                    id: 'settings',
-                    name: 'Delivery Master',
-                    address: 'Rua Exemplo, 123',
-                    managerPassword: '',
-                    deliveryRanges: JSON.stringify([]),
-                    driverFeeRanges: JSON.stringify([]),
-                    latitude: -23.550520,
-                    longitude: -46.633308
-                }
-            });
+        // @ts-ignore - Confident that authMiddleware attaches user with storeId
+        const storeId = req.user?.storeId;
+
+        if (!storeId) {
+            res.status(400).json({ error: 'Store context missing' });
+            return;
+        }
+
+        const store = await prisma.store.findUnique({ where: { id: storeId } });
+
+        if (!store) {
+            res.status(404).json({ error: 'Store not found' });
+            return;
         }
 
         // Parse JSON fields safely
         const parsedSettings = {
-            ...settings,
-            deliveryRanges: typeof settings.deliveryRanges === 'string' ? JSON.parse(settings.deliveryRanges || '[]') : settings.deliveryRanges,
-            driverFeeRanges: typeof settings.driverFeeRanges === 'string' ? JSON.parse(settings.driverFeeRanges || '[]') : settings.driverFeeRanges,
-            integrations: typeof settings.integrations === 'string' ? JSON.parse(settings.integrations || '{}') : settings.integrations,
+            ...store,
+            deliveryRanges: typeof store.deliveryRanges === 'string' ? JSON.parse(store.deliveryRanges || '[]') : store.deliveryRanges,
+            driverFeeRanges: typeof store.driverFeeRanges === 'string' ? JSON.parse(store.driverFeeRanges || '[]') : store.driverFeeRanges,
+            integrations: typeof store.integrations === 'string' ? JSON.parse(store.integrations || '{}') : store.integrations,
         };
 
         res.json(parsedSettings);
     } catch (error) {
         console.error(error);
-        res.status(500).json({ error: 'Failed to fetch settings' });
+        res.status(500).json({ error: 'Failed to fetch store settings' });
     }
 };
 
-export const updateSettings = async (req: Request, res: Response) => {
+export const updateStore = async (req: Request, res: Response) => {
     try {
+        // @ts-ignore
+        const storeId = req.user?.storeId;
         const { id, deliveryRanges, driverFeeRanges, integrations, ...data } = req.body;
 
-        const updated = await prisma.storeSettings.upsert({
-            where: { id: 'settings' },
-            update: {
+        if (!storeId) {
+            res.status(400).json({ error: 'Store context missing' });
+            return;
+        }
+
+        const updated = await prisma.store.update({
+            where: { id: storeId },
+            data: {
                 ...data, // name, address, etc.
-                deliveryRanges: JSON.stringify(deliveryRanges || []),
-                driverFeeRanges: JSON.stringify(driverFeeRanges || []),
-                integrations: JSON.stringify(integrations || {})
-            },
-            create: {
-                id: 'settings',
-                ...data,
                 deliveryRanges: JSON.stringify(deliveryRanges || []),
                 driverFeeRanges: JSON.stringify(driverFeeRanges || []),
                 integrations: JSON.stringify(integrations || {})
@@ -67,6 +65,6 @@ export const updateSettings = async (req: Request, res: Response) => {
         res.json(parsedSettings);
     } catch (error) {
         console.error(error);
-        res.status(500).json({ error: 'Failed to update settings' });
+        res.status(500).json({ error: 'Failed to update store settings' });
     }
 };
