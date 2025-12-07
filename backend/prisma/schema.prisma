@@ -1,0 +1,260 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+// Enums
+enum OrderStatus {
+  PENDING
+  RECEIVED
+  PREPARING
+  DELIVERING
+  COMPLETED
+  CANCELLED
+}
+
+enum PaymentMethod {
+  CASH
+  CARD
+  PIX
+  WALLET
+}
+
+enum ProductCategory {
+  SNACK
+  PIZZA
+  DRINK
+  DESSERT
+}
+
+enum OrderSource {
+  STORE
+  IFOOD
+  WHATSAPP
+  DIGITAL_MENU
+  WHATSAPP_BOT
+}
+
+enum UserRole {
+  ADMIN
+  STORE
+}
+
+// Models
+
+model Client {
+  id            String   @id @default(uuid())
+  name          String
+  phone         String
+  email         String?
+  walletBalance Float    @default(0.0)
+  preferences   String?
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+  
+  // Relations
+  addresses     Address[]
+  orders        Order[]
+}
+
+model Address {
+  id           String  @id @default(uuid())
+  street       String
+  number       String
+  neighborhood String
+  city         String
+  zipCode      String?
+  reference    String?
+  complement   String?
+  formatted    String?
+  
+  // Relations
+  clientId     String
+  client       Client  @relation(fields: [clientId], references: [id])
+}
+
+model Product {
+  id          String         @id @default(uuid())
+  name        String
+  description String
+  price       Float
+  category    ProductCategory
+  imageUrl    String?
+  stock       Int            @default(0)
+  ingredients String         // Stored as JSON string or comma-separated
+  
+  createdAt   DateTime       @default(now())
+  updatedAt   DateTime       @updatedAt
+}
+
+model Driver {
+  id        String   @id @default(uuid())
+  name      String
+  phone     String
+  plate     String?
+  pixKey    String?
+  dailyRate Float?
+  isActive  Boolean  @default(true)
+  
+  orders    Order[]
+}
+
+model Employee {
+  id                    String   @id @default(uuid())
+  name                  String
+  cpf                   String
+  rg                    String?
+  birthDate             DateTime?
+  phone                 String
+  address               String
+  email                 String?
+  role                  String
+  admissionDate         DateTime
+  baseSalary            Float
+  transportVoucherValue Float    @default(0)
+  isActive              Boolean  @default(true)
+  
+  advances              EmployeeAdvance[]
+}
+
+model EmployeeAdvance {
+  id          String   @id @default(uuid())
+  date        DateTime @default(now())
+  amount      Float
+  description String
+  
+  employeeId  String
+  employee    Employee @relation(fields: [employeeId], references: [id])
+}
+
+model SupplyItem {
+  id          String   @id @default(uuid())
+  name        String
+  unit        String
+  quantity    Float    @default(0)
+  minQuantity Float    @default(0)
+  category    String?
+  updatedAt   DateTime @updatedAt
+}
+
+model Order {
+  id               String        @id @default(uuid())
+  displayId        Int           @default(0) // Sequential ID for UI
+  source           OrderSource   @default(STORE)
+  
+  // Client Info Snapshot (in case client is deleted or changed)
+  clientName       String
+  clientPhone      String
+  deliveryAddress  String
+  
+  // Financials
+  subtotal         Float
+  deliveryFee      Float
+  driverFee        Float?
+  driverPaid       Boolean       @default(false)
+  discount         Float         @default(0)
+  total            Float
+  changeFor        Float?
+  
+  status           OrderStatus   @default(PENDING)
+  paymentMethod    PaymentMethod
+  paymentStatus    String        @default("Pending") // 'Pending' | 'Paid'
+  
+  // Relations
+  clientId         String
+  client           Client        @relation(fields: [clientId], references: [id])
+  
+  driverId         String?
+  driver           Driver?       @relation(fields: [driverId], references: [id])
+  
+  items            OrderItem[]
+
+  createdAt        DateTime      @default(now())
+  updatedAt        DateTime      @updatedAt
+}
+
+model OrderItem {
+  id             String  @id @default(uuid())
+  productName    String
+  quantity       Int
+  unitPrice      Float
+  notes          String?
+  
+  // Pizza specifics
+  isHalfHalf     Boolean @default(false)
+  secondFlavorName String?
+  extras         String? // JSON or comma separated
+  
+  orderId        String
+  order          Order   @relation(fields: [orderId], references: [id])
+  
+  productId      String?
+  // We loosely link to Product so we keep history if product is deleted
+}
+
+model StoreSettings {
+  id              String   @id @default("settings") // Singleton
+  name            String
+  address         String
+  logoUrl         String?
+  contactPhone    String?
+  isStoreOpen     Boolean  @default(true)
+  whatsappStatus  String?
+  latitude        Float?   @default(-23.550520) // Default: SP
+  longitude       Float?   @default(-46.633308) // Default: SP
+  
+  // JSON configs
+  integrations    String? // JSON
+  deliveryRanges  String? // JSON
+  driverFeeRanges String? // JSON
+  
+  managerPassword String?
+}
+
+enum ChatStatus {
+  ACTIVE
+  PAUSED
+  COMPLETED
+}
+
+model Chat {
+  id              String   @id @default(uuid())
+  remoteJid       String   @unique // The phone number ID (e.g., 551199999999@c.us)
+  contactName     String
+  botStatus       ChatStatus @default(ACTIVE)
+  lastMessageAt   DateTime   @default(now())
+  
+  tempData        String?    // JSON string for Shopping Cart state
+  
+  messages        Message[]
+  createdAt       DateTime   @default(now())
+  updatedAt       DateTime   @updatedAt
+}
+
+model Message {
+  id              String   @id @default(uuid())
+  body            String
+  fromMe          Boolean
+  type            String   @default("chat") // chat, image, ptt
+  timestamp       DateTime @default(now())
+  
+  chatId          String
+  chat            Chat     @relation(fields: [chatId], references: [id])
+}
+
+model User {
+  id        String   @id @default(uuid())
+  username  String   @unique
+  password  String   // Hashed
+  role      UserRole @default(STORE)
+  name      String?
+  isActive  Boolean  @default(true)
+  createdAt DateTime @default(now())
+}
