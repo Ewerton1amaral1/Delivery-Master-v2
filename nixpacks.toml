@@ -1,0 +1,30 @@
+# Railway Nixpacks Config (Root Fallback)
+# This allows deployment even if "Root Directory" is not set to "backend"
+
+[phases.setup]
+nixPkgs = [
+    "nodejs",
+    "npm",
+    "chromium",
+    "nss",
+    "freetype",
+    "harfbuzz",
+    "ca-certificates",
+    "ttf-freefont"
+]
+
+[phases.build]
+# Force commands to run inside backend folder
+cmds = [
+    "cd backend && npm ci",
+    "cd backend && npx prisma generate",
+    "cd backend && npx tsc"
+]
+
+[start]
+# Force start inside backend folder
+cmd = "cd backend && node dist/server.js"
+
+[variables]
+PUPPETEER_SKIP_CHROMIUM_DOWNLOAD = "true"
+PUPPETEER_EXECUTABLE_PATH = "/usr/bin/chromium"
