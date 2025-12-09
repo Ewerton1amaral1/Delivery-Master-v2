@@ -1,35 +1,50 @@
-
-FROM node:20-slim
-
-# 1. Install system dependencies for Puppeteer + Common libs
-RUN apt-get update && apt-get install -y \
-    chromium \
-    fonts-ipafont-gothic fonts-wqy-zenhei fonts-thai-tlwg fonts-kacst fonts-freefont-ttf libxss1 \
-    openssl \
-    --no-install-recommends \
-    && rm -rf /var/lib/apt/lists/*
-
-# 2. Set Env to use installed Chrome
-ENV PUPPETEER_SKIP_CHROMIUM_DOWNLOAD=true \
-    PUPPETEER_EXECUTABLE_PATH=/usr/bin/chromium \
-    NODE_ENV=production
+# Build Stage
+FROM node:20-alpine AS builder
 
 WORKDIR /app
 
-# 3. Copy Manifests (Relative to backend folder now)
-COPY package.json ./package.json
-COPY package-lock.json ./package-lock.json
+# Install build tools needed for some npm packages
+RUN apk add --no-cache python3 make g++
 
-# 4. Install dependencies
-RUN npm ci --omit=dev
-RUN npm ci # Install prisma CLI (dev dep) for generate
+COPY package*.json ./
+COPY prisma ./prisma/
 
-# 5. Copy Source Code
+# Force strict clean install
+RUN rm -rf package-lock.json node_modules && npm install
+
+RUN npx prisma generate
+
 COPY . .
 
-# 6. Build
-RUN npx prisma generate
-RUN npx tsc
+RUN npm run build
 
-# 7. Start
-CMD ["node", "dist/server.js"]
+# Production Stage
+FROM node:20-alpine AS runner
+
+WORKDIR /app
+
+ENV NODE_ENV=production
+
+# Install Chrome dependencies for Puppeteer
+RUN apk add --no-cache \
+    chromium \
+    nss \
+    freetype \
+    harfbuzz \
+    ca-certificates \
+    ttf-freefont \
+    nodejs \
+    yarn
+
+# Tell Puppeteer to skip downloading Chrome. We'll use the installed package.
+ENV PUPPETEER_SKIP_CHROMIUM_DOWNLOAD=true \
+    PUPPETEER_EXECUTABLE_PATH=/usr/bin/chromium-browser
+
+COPY --from=builder /app/package*.json ./
+COPY --from=builder /app/dist ./dist
+COPY --from=builder /app/prisma ./prisma
+COPY --from=builder /app/node_modules ./node_modules
+
+EXPOSE 3001
+
+CMD ["npm", "run", "start"]

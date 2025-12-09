@@ -10,8 +10,16 @@ const PORT = process.env.PORT || 3000;
 app.use(cors());
 app.use(express.json());
 
-app.get('/health', (req, res) => {
-    res.json({ status: 'ok', message: 'Delivery Master Backend is running' });
+import prisma from './lib/prisma';
+
+app.get('/health', async (req, res) => {
+    try {
+        await prisma.$queryRaw`SELECT 1`;
+        res.json({ status: 'ok', db: 'connected', message: 'Delivery Master Backend is running' });
+    } catch (error) {
+        console.error('Health check failed:', error);
+        res.status(500).json({ status: 'error', db: 'disconnected', message: 'Database connection failed' });
+    }
 });
 
 app.get('/', (req, res) => {

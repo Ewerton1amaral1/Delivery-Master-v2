@@ -33,7 +33,16 @@ export class WhatsappManager {
         const client = new Client({
             authStrategy: new LocalAuth({ clientId: storeId }), // Saves to .wwebjs_auth/session-<storeId>
             puppeteer: {
-                args: ['--no-sandbox', '--disable-setuid-sandbox'],
+                args: [
+                    '--no-sandbox',
+                    '--disable-setuid-sandbox',
+                    '--disable-dev-shm-usage',
+                    '--disable-accelerated-2d-canvas',
+                    '--no-first-run',
+                    '--no-zygote',
+                    '--single-process', // <- This one is risky but saves memory. If it crashes, remove it.
+                    '--disable-gpu'
+                ],
                 executablePath: process.env.PUPPETEER_EXECUTABLE_PATH || undefined,
             }
         });
