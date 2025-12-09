@@ -1,35 +1,61 @@
-FROM node:20-slim
-
-# 1. Install system dependencies for Puppeteer + Common libs + Build Tools
-RUN apt-get update && apt-get install -y \
-    chromium \
-    fonts-ipafont-gothic fonts-wqy-zenhei fonts-thai-tlwg fonts-kacst fonts-freefont-ttf libxss1 \
-    openssl \
-    python3 \
-    make \
-    g++ \
-    --no-install-recommends \
-    && rm -rf /var/lib/apt/lists/*
-
-# 2. Set Env to use installed Chrome
-ENV PUPPETEER_SKIP_CHROMIUM_DOWNLOAD=true \
-    PUPPETEER_EXECUTABLE_PATH=/usr/bin/chromium \
-    NODE_ENV=production
+# Build Stage
+FROM node:20-alpine AS builder
 
 WORKDIR /app
 
-# 3. Copy Backend manifests first (for cache)
-COPY backend/package.json ./package.json
+# Install build tools needed for some npm packages
+RUN apk add --no-cache python3 make g++
 
-# 4. Install dependencies FORCEFULLY (ignoring lockfile)
-RUN npm install
+# Copy root package files first to leverage caching
+COPY package.json package-lock.json ./
+# Copy backend package file
+COPY backend/package.json ./backend/
 
-# 5. Copy Source Code
-COPY backend/ .
+# Install dependencies from root (this installs everything including workspace deps)
+# We use --workspace=backend to install only backend deps + shared, but usually installing all is safer/easier
+RUN npm ci
 
-# 6. Build Project
+WORKDIR /app/backend
+
+COPY backend/prisma ./prisma/
 RUN npx prisma generate
-RUN npx tsc
 
-# 7. Start
-CMD ["node", "dist/server.js"]
+COPY backend/. .
+
+RUN npm run build
+
+# Production Stage
+FROM node:20-alpine AS runner
+
+WORKDIR /app
+
+ENV NODE_ENV=production
+
+# Install Chrome dependencies for Puppeteer
+RUN apk add --no-cache \
+    chromium \
+    nss \
+    freetype \
+    harfbuzz \
+    ca-certificates \
+    ttf-freefont \
+    nodejs \
+    yarn
+
+# Tell Puppeteer to skip downloading Chrome. We'll use the installed package.
+ENV PUPPETEER_SKIP_CHROMIUM_DOWNLOAD=true \
+    PUPPETEER_EXECUTABLE_PATH=/usr/bin/chromium-browser
+
+# Copy necessary files from builder
+# Note: node_modules structure might be different in monorepo, usually hoisted to root
+COPY --from=builder /app/node_modules ./node_modules
+# Also copy backend specific modules if any (though usually hoist)
+# COPY --from=builder /app/backend/node_modules ./backend/node_modules
+
+COPY --from=builder /app/backend/package.json ./
+COPY --from=builder /app/backend/dist ./dist
+COPY --from=builder /app/backend/prisma ./prisma
+
+EXPOSE 3001
+
+CMD ["npm", "run", "start"]
