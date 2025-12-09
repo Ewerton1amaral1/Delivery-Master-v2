@@ -6,15 +6,21 @@ WORKDIR /app
 # Install build tools needed for some npm packages
 RUN apk add --no-cache python3 make g++
 
-COPY package*.json ./
-COPY prisma ./prisma/
+# Copy root package files first to leverage caching
+COPY package.json package-lock.json ./
+# Copy backend package file
+COPY backend/package.json ./backend/
 
-# Strict clean install using lockfile
+# Install dependencies from root (this installs everything including workspace deps)
+# We use --workspace=backend to install only backend deps + shared, but usually installing all is safer/easier
 RUN npm ci
 
+WORKDIR /app/backend
+
+COPY backend/prisma ./prisma/
 RUN npx prisma generate
 
-COPY . .
+COPY backend/. .
 
 RUN npm run build
 
@@ -40,10 +46,15 @@ RUN apk add --no-cache \
 ENV PUPPETEER_SKIP_CHROMIUM_DOWNLOAD=true \
     PUPPETEER_EXECUTABLE_PATH=/usr/bin/chromium-browser
 
-COPY --from=builder /app/package*.json ./
-COPY --from=builder /app/dist ./dist
-COPY --from=builder /app/prisma ./prisma
+# Copy necessary files from builder
+# Note: node_modules structure might be different in monorepo, usually hoisted to root
 COPY --from=builder /app/node_modules ./node_modules
+# Also copy backend specific modules if any (though usually hoist)
+# COPY --from=builder /app/backend/node_modules ./backend/node_modules
+
+COPY --from=builder /app/backend/package.json ./
+COPY --from=builder /app/backend/dist ./dist
+COPY --from=builder /app/backend/prisma ./prisma
 
 EXPOSE 3001
 
